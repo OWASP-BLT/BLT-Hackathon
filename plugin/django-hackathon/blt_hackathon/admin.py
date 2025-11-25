@@ -25,8 +25,8 @@ class HackathonAdmin(admin.ModelAdmin):
     """Admin interface for Hackathon model."""
     
     list_display = ['name', 'start_time', 'end_time', 'max_participants', 'is_ongoing', 'has_ended']
-    list_filter = ['start_time', 'end_time', 'is_online', 'registration_open']
-    search_fields = ['name', 'description', 'theme', 'location']
+    list_filter = ['start_time', 'end_time', 'registration_open']
+    search_fields = ['name', 'description']
     prepopulated_fields = {'slug': ('name',)}
     date_hierarchy = 'start_time'
     ordering = ['-start_time']
@@ -170,21 +170,21 @@ class ContributorAdmin(admin.ModelAdmin):
 class GitHubIssueAdmin(admin.ModelAdmin):
     """Admin interface for GitHubIssue model."""
     
-    list_display = ['title', 'github_id', 'issue_type', 'state', 'author', 'created_at']
-    list_filter = ['issue_type', 'state', 'created_at', 'updated_at']
-    search_fields = ['title', 'github_id', 'github_url', 'author__name']
+    list_display = ['title', 'issue_id', 'type', 'is_merged', 'contributor', 'created_at']
+    list_filter = ['type', 'is_merged', 'created_at', 'updated_at']
+    search_fields = ['title', 'issue_id', 'github_url', 'contributor__name']
     date_hierarchy = 'created_at'
     ordering = ['-created_at']
     
     fieldsets = [
         ('GitHub Information', {
-            'fields': ['title', 'github_id', 'github_url', 'issue_type']
+            'fields': ['title', 'issue_id', 'github_url', 'type']
         }),
         ('Status', {
-            'fields': ['state', 'author', 'closed_by']
+            'fields': ['is_merged', 'contributor', 'user_profile']
         }),
         ('Metadata', {
-            'fields': ['labels', 'created_at', 'updated_at', 'closed_at']
+            'fields': ['created_at', 'updated_at', 'closed_at', 'merged_at']
         }),
     ]
     
@@ -193,8 +193,8 @@ class GitHubIssueAdmin(admin.ModelAdmin):
     def github_link(self, obj):
         """Display clickable GitHub link."""
         if obj.github_url:
-            return format_html('<a href="{}" target="_blank">#{}</a>', obj.github_url, obj.github_id)
-        return f"#{obj.github_id}"
+            return format_html('<a href="{}" target="_blank">#{}</a>', obj.github_url, obj.issue_id)
+        return f"#{obj.issue_id}"
     github_link.short_description = 'GitHub Link'
 
 

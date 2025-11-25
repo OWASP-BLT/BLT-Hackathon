@@ -106,7 +106,7 @@ class GitHubIssue(models.Model):
         ordering = ["-created_at"]
         unique_together = ("issue_id", "repo")
         indexes = [
-            models.Index(fields=["type", "is_merged"], name="hackathon_issue_type_merged_idx"),
+            models.Index(fields=["type", "is_merged"], name="hackathon_issue_type_idx"),
             models.Index(fields=["created_at"], name="hackathon_issue_created_idx"),
             models.Index(fields=["merged_at"], name="hackathon_issue_merged_idx"),
         ]

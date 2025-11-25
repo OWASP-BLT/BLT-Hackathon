@@ -1,0 +1,46 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description"
+              content="{% block description %}Time Logging - Track your development time on GitHub issues{% endblock %}">
+        <meta name="keywords"
+              content="{% block keywords %}django, time tracking, github issues, productivity, development{% endblock %}">
+        <title>
+            {% block title %}Hackathon{% endblock %}
+        </title>
+        {# Allow project to inject their own CSS #}
+        {% block extra_head %}{% endblock %}
+        {# Minimal default styling with Tailwind CDN #}
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-100">
+        {# Optional navigation #}
+        {% block navigation %}
+            <nav class="bg-blue-600 text-white p-4 shadow-md">
+                <div class="container mx-auto">
+                    <h1 class="text-xl font-bold">Hackathon</h1>
+                </div>
+            </nav>
+        {% endblock %}
+        
+        {# Main content area #}
+        <main class="min-h-screen">
+            {% block content %}{% endblock %}
+        </main>
+        
+        {# Optional footer #}
+        {% block footer %}
+            <footer class="bg-gray-800 text-white p-4 mt-8">
+                <div class="container mx-auto text-center">
+                    <p>&copy; 2024 Hackathon Plugin</p>
+                </div>
+            </footer>
+        {% endblock %}
+        
+        {# Allow project to inject scripts #}
+        {% block extra_scripts %}{% endblock %}
+    </body>
+</html>

@@ -1,12 +1,33 @@
 
 from django import forms
 from django.db.models import Q
+from django.contrib.auth.models import User
 
-from models import (
+from .models import (
     Hackathon,
     HackathonPrize,
     HackathonSponsor,
+    get_organization_model,
+    HAS_ORGANIZATION,
 )
+
+# Get Organization model if available
+Organization = get_organization_model() if HAS_ORGANIZATION else None
+
+# Try to get Repo model (might be in website app)
+Repo = None
+if HAS_ORGANIZATION:
+    try:
+        from django.apps import apps
+        # Try common app names where Repo model might exist
+        for app_name in ['website', 'blt', 'main', 'core']:
+            try:
+                Repo = apps.get_model(app_name, 'Repo')
+                break
+            except LookupError:
+                continue
+    except ImportError:
+        pass
 
 
 
@@ -29,34 +50,36 @@ class HackathonForm(forms.ModelForm):
 
     class Meta:
         model = Hackathon
-        fields = [
+        # Build fields list conditionally based on available models
+        base_fields = [
             "name",
             "description",
-            "organization",
             "start_time",
             "end_time",
             "banner_image",
             "rules",
             "registration_open",
             "max_participants",
-            "repositories",
             "sponsor_note",
             "sponsor_link",
         ]
+        # Add organization OR owner field based on availability
+        if HAS_ORGANIZATION:
+            fields = ["name", "description", "organization"] + base_fields[2:] + ["repositories"]
+        else:
+            fields = ["name", "description", "owner"] + base_fields[2:]
+            
         base_input_class = (
             "w-full rounded-lg border-gray-300 shadow-sm focus:border-[#e74c3c] "
             "focus:ring focus:ring-[#e74c3c] focus:ring-opacity-50"
         )
+        
+        # Build widgets conditionally
         widgets = {
             "name": forms.TextInput(
                 attrs={
                     "class": base_input_class,
                     "placeholder": "Enter hackathon name",
-                }
-            ),
-            "organization": forms.Select(
-                attrs={
-                    "class": base_input_class,
                 }
             ),
             "description": forms.Textarea(
@@ -104,50 +127,73 @@ class HackathonForm(forms.ModelForm):
                     "placeholder": "Enter maximum number of participants",
                 }
             ),
-            "repositories": forms.SelectMultiple(
-                attrs={
-                    "class": base_input_class,
-                    "size": "5",
-                }
-            ),
             "registration_open": forms.CheckboxInput(
                 attrs={
                     "class": ("h-5 w-5 text-[#e74c3c] focus:ring-[#e74c3c] " "border-gray-300 rounded"),
                 }
             ),
         }
+        
+        # Add organization or owner widget based on availability
+        if HAS_ORGANIZATION:
+            widgets["organization"] = forms.Select(
+                attrs={
+                    "class": base_input_class,
+                }
+            )
+            widgets["repositories"] = forms.SelectMultiple(
+                attrs={
+                    "class": base_input_class,
+                    "size": "5",
+                }
+            )
+        else:
+            widgets["owner"] = forms.Select(
+                attrs={
+                    "class": base_input_class,
+                }
+            )
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
 
-        # Filter organizations to only show those where the user is an admin or manager
-        if user:
-            self.fields["organization"].queryset = Organization.objects.filter(
-                Q(admin=user) | Q(managers=user)
-            ).distinct()
-
-            # Filter repositories based on the selected organization
-            if self.instance.pk and self.instance.organization:
-                # When editing, show all repositories from the organization
-                self.fields["repositories"].queryset = Repo.objects.filter(organization=self.instance.organization)
+        if HAS_ORGANIZATION and Organization and user:
+            # Handle organization field
+            if hasattr(Organization, 'admin') and hasattr(Organization, 'managers'):
+                self.fields["organization"].queryset = Organization.objects.filter(
+                    Q(admin=user) | Q(managers=user)
+                ).distinct()
+            elif hasattr(Organization, 'owner'):
+                self.fields["organization"].queryset = Organization.objects.filter(owner=user)
             else:
-                # When creating new, try to get organization from form data
-                organization_id = None
-                if "data" in kwargs and kwargs["data"]:
-                    organization_id = kwargs["data"].get("organization")
+                self.fields["organization"].queryset = Organization.objects.all()
 
-                if organization_id:
-                    # Show repositories from the selected organization
-                    self.fields["repositories"].queryset = Repo.objects.filter(organization_id=organization_id)
+            # Handle repositories field if available
+            if Repo and "repositories" in self.fields:
+                if self.instance.pk and hasattr(self.instance, 'organization') and self.instance.organization:
+                    self.fields["repositories"].queryset = Repo.objects.filter(organization=self.instance.organization)
                 else:
-                    # No organization selected yet, start with empty queryset
                     self.fields["repositories"].queryset = Repo.objects.none()
+        
+        elif not HAS_ORGANIZATION and user:
+            # Handle owner field
+            self.fields["owner"].initial = user
+            if not user.is_superuser:
+                # Non-superusers can only set themselves as owner
+                self.fields["owner"].queryset = User.objects.filter(id=user.id)
+            else:
+                # Superusers can select any active user
+                self.fields["owner"].queryset = User.objects.filter(is_active=True)
 
     def clean_new_repo_urls(self):
         """Validate and parse new repository URLs."""
         new_repo_urls = self.cleaned_data.get("new_repo_urls", "")
         if not new_repo_urls:
+            return []
+
+        # Only validate repo URLs if Repo model is available
+        if not Repo:
             return []
 
         urls = [url.strip() for url in new_repo_urls.strip().split("\n") if url.strip()]
@@ -173,7 +219,8 @@ class HackathonForm(forms.ModelForm):
         repositories = self.cleaned_data.get("repositories")
         organization = self.cleaned_data.get("organization")
 
-        if repositories and organization:
+        # Only validate if both Repo model and organization are available
+        if repositories and organization and Repo:
             # Ensure all repositories belong to the selected organization
             valid_repos = Repo.objects.filter(id__in=[r.id for r in repositories], organization=organization)
             return valid_repos
@@ -188,9 +235,9 @@ class HackathonForm(forms.ModelForm):
             # Save many-to-many relationships
             self.save_m2m()
 
-            # Create and add new repositories
+            # Create and add new repositories only if Repo model is available
             new_repo_urls = self.cleaned_data.get("new_repo_urls", [])
-            if new_repo_urls:
+            if new_repo_urls and Repo and hasattr(instance, 'organization') and instance.organization:
                 organization = instance.organization
                 for repo_url in new_repo_urls:
                     # Extract repo name from URL
@@ -216,7 +263,25 @@ class HackathonForm(forms.ModelForm):
 class HackathonSponsorForm(forms.ModelForm):
     class Meta:
         model = HackathonSponsor
-        fields = ["organization", "sponsor_level", "logo", "website"]
+        # Build fields list conditionally based on available models
+        base_fields = ["sponsor_name", "sponsor_level", "logo", "website"]
+        if HAS_ORGANIZATION:
+            fields = ["organization"] + base_fields
+        else:
+            fields = base_fields
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Add organization field conditionally if Organization model exists
+        if HAS_ORGANIZATION and Organization:
+            if 'organization' not in self.fields:
+                self.fields['organization'] = forms.ModelChoiceField(
+                    queryset=Organization.objects.all(),
+                    required=False,
+                    empty_label="Select organization (optional)",
+                    help_text="Link to organization if available"
+                )
 
 
 class HackathonPrizeForm(forms.ModelForm):

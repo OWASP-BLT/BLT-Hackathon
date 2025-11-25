@@ -30,7 +30,7 @@
                             {{ form.name }}
                             {% if form.name.errors %}<p class="mt-2 text-sm text-red-600">{{ form.name.errors.0 }}</p>{% endif %}
                         </div>
-                        <!-- Organization (only show if Organization model is available) -->
+                        <!-- Organization OR Owner (conditional) -->
                         {% if has_organization %}
                         <div>
                             <label for="{{ form.organization.id_for_label }}"
@@ -40,7 +40,19 @@
                             {{ form.organization }}
                             {% if form.organization.errors %}<p class="mt-2 text-sm text-red-600">{{ form.organization.errors.0 }}</p>{% endif %}
                             <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                                Only organizations where you are an admin or manager are shown.
+                                Organization hosting this hackathon with repository access.
+                            </p>
+                        </div>
+                        {% else %}
+                        <div>
+                            <label for="{{ form.owner.id_for_label }}"
+                                   class="block text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                                Owner <span class="text-[#e74c3c]">*</span>
+                            </label>
+                            {{ form.owner }}
+                            {% if form.owner.errors %}<p class="mt-2 text-sm text-red-600">{{ form.owner.errors.0 }}</p>{% endif %}
+                            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                The user who owns and manages this hackathon.
                             </p>
                         </div>
                         {% endif %}

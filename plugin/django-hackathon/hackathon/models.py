@@ -119,13 +119,6 @@ class Hackathon(models.Model):
     name = models.CharField(max_length=255)
     slug = models.SlugField(unique=True, blank=True, max_length=255)
     description = models.TextField()
-    # Organization field - only available if Organization model exists in parent project
-    organization = models.ForeignKey(
-        'website.Organization' if HAS_ORGANIZATION else 'auth.User',
-        on_delete=models.CASCADE,
-        related_name="hackathons" if HAS_ORGANIZATION else "owned_hackathons",
-        help_text="Organization hosting the hackathon" if HAS_ORGANIZATION else "User hosting the hackathon"
-    )
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     banner_image = models.ImageField(upload_to="hackathon_banners", null=True, blank=True)
@@ -147,7 +140,6 @@ class Hackathon(models.Model):
         ordering = ["-start_time"]
         indexes = [
             models.Index(fields=["start_time"], name="hackathon_start_idx"),
-            models.Index(fields=["organization"], name="hackathon_org_idx"),
         ]
         constraints = [models.UniqueConstraint(fields=["slug"], name="unique_hackathon_slug")]
 
@@ -158,6 +150,14 @@ class Hackathon(models.Model):
         if not self.slug:
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
+
+    def get_organizer_name(self):
+        """Get the organizer name for display."""
+        if HAS_ORGANIZATION and hasattr(self, 'organization'):
+            return self.organization.name if hasattr(self.organization, 'name') else str(self.organization)
+        elif hasattr(self, 'owner'):
+            return self.owner.username if hasattr(self.owner, 'username') else str(self.owner)
+        return "Unknown"
 
     @property
     def is_ongoing(self):
@@ -259,6 +259,31 @@ class Hackathon(models.Model):
         leaderboard_list.sort(key=lambda x: x["count"], reverse=True)
 
         return leaderboard_list
+
+
+# Add either Organization field OR Owner field dynamically based on availability
+if HAS_ORGANIZATION:
+    # If Organization model exists, use it
+    Hackathon.add_to_class(
+        'organization',
+        models.ForeignKey(
+            Organization,
+            on_delete=models.CASCADE,
+            related_name="hackathons",
+            help_text="Organization hosting the hackathon"
+        )
+    )
+else:
+    # If no Organization model, fall back to User ownership
+    Hackathon.add_to_class(
+        'owner',
+        models.ForeignKey(
+            User,
+            on_delete=models.CASCADE,
+            related_name="owned_hackathons",
+            help_text="User who created this hackathon"
+        )
+    )
 
 
 class HackathonSponsor(models.Model):

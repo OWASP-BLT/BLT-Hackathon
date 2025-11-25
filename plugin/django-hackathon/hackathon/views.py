@@ -16,18 +16,43 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from forms import HackathonForm, HackathonPrizeForm, HackathonSponsorForm
-from models import (
-    IP,
+from .forms import HackathonForm, HackathonPrizeForm, HackathonSponsorForm
+from .models import (
     Contributor,
     GitHubIssue,
     Hackathon,
     HackathonPrize,
     HackathonSponsor,
-    Organization,
-    Repo,
-    UserProfile,
+    get_organization_model,
+    HAS_ORGANIZATION,
 )
+
+# Get models conditionally
+Organization = get_organization_model() if HAS_ORGANIZATION else None
+
+# Try to get other BLT models if available
+IP = None
+Repo = None
+UserProfile = None
+
+if HAS_ORGANIZATION:
+    try:
+        from django.apps import apps
+        # Try to get models from common app names
+        for app_name in ['website', 'blt', 'main', 'core']:
+            try:
+                if not IP:
+                    IP = apps.get_model(app_name, 'IP')
+                if not Repo:
+                    Repo = apps.get_model(app_name, 'Repo') 
+                if not UserProfile:
+                    UserProfile = apps.get_model(app_name, 'UserProfile')
+                if IP and Repo and UserProfile:
+                    break
+            except LookupError:
+                continue
+    except ImportError:
+        pass
 
 logger = logging.getLogger(__name__)
 REPO_REFRESH_DELAY_SECONDS = getattr(settings, "HACKATHON_REPO_REFRESH_DELAY", 1.0)
@@ -61,10 +86,11 @@ class HackathonListView(ListView):
         elif time_filter == "past":
             queryset = queryset.filter(end_time__lt=now)
 
-        # Filter by organization
-        org_id = self.request.GET.get("organization")
-        if org_id and org_id.isdigit():
-            queryset = queryset.filter(organization_id=int(org_id))
+        # Filter by organization (only if Organization model is available)
+        if HAS_ORGANIZATION:
+            org_id = self.request.GET.get("organization")
+            if org_id and org_id.isdigit():
+                queryset = queryset.filter(organization_id=int(org_id))
 
         return queryset
 
@@ -77,8 +103,13 @@ class HackathonListView(ListView):
         context["ongoing_count"] = Hackathon.objects.filter(start_time__lte=now, end_time__gte=now).count()
         context["past_count"] = Hackathon.objects.filter(end_time__lt=now).count()
 
-        # Add organizations for filter
-        context["organizations"] = Organization.objects.all()
+        # Add organizations for filter only if Organization model is available
+        if HAS_ORGANIZATION and Organization:
+            context["organizations"] = Organization.objects.all()
+            context["has_organization"] = True
+        else:
+            context["organizations"] = []
+            context["has_organization"] = False
 
         # Add current filter values
         context["current_status"] = self.request.GET.get("status", "")
@@ -257,11 +288,23 @@ class HackathonDetailView(DetailView):
         if user.is_authenticated:
             if user.is_superuser:
                 can_manage = True
-            else:
+            elif HAS_ORGANIZATION and hasattr(hackathon, 'organization') and hackathon.organization:
                 # Check if user is admin or manager of the organization
                 org = hackathon.organization
-                can_manage = org.is_admin(user) or org.is_manager(user)
+                if hasattr(org, 'is_admin') and hasattr(org, 'is_manager'):
+                    can_manage = org.is_admin(user) or org.is_manager(user)
+                elif hasattr(org, 'admin') and org.admin == user:
+                    can_manage = True
+                elif hasattr(org, 'managers') and user in org.managers.all():
+                    can_manage = True
+                elif hasattr(org, 'owner') and org.owner == user:
+                    can_manage = True
+            elif hasattr(hackathon, 'owner') and hackathon.owner == user:
+                # Fallback to owner check when no organization
+                can_manage = True
+        
         context["can_manage"] = can_manage
+        context["has_organization"] = HAS_ORGANIZATION
 
         # Get all merged pull requests during the hackathon period for participant count
         merged_prs = self._get_base_pr_query(hackathon, repo_ids, is_merged=True)
@@ -424,12 +467,31 @@ class HackathonPrizeCreateView(HackathonItemCreateMixin, CreateView):
 def refresh_repository_data(request, hackathon_slug, repo_id):
     """View to refresh repository data from GitHub API."""
     hackathon = get_object_or_404(Hackathon, slug=hackathon_slug)
-    repo = get_object_or_404(Repo, id=repo_id)
+    repo = get_object_or_404(Repo, id=repo_id) if Repo else None
 
     # Check if user has permission to refresh data
     user = request.user
-    if not (user.is_superuser or hackathon.organization.is_admin(user) or hackathon.organization.is_manager(user)):
+    has_permission = user.is_superuser
+    
+    if not has_permission and HAS_ORGANIZATION and hasattr(hackathon, 'organization') and hackathon.organization:
+        org = hackathon.organization
+        if hasattr(org, 'is_admin') and hasattr(org, 'is_manager'):
+            has_permission = org.is_admin(user) or org.is_manager(user)
+        elif hasattr(org, 'admin') and org.admin == user:
+            has_permission = True
+        elif hasattr(org, 'managers') and user in org.managers.all():
+            has_permission = True
+        elif hasattr(org, 'owner') and org.owner == user:
+            has_permission = True
+    elif not has_permission and hasattr(hackathon, 'owner') and hackathon.owner == user:
+        has_permission = True
+    
+    if not has_permission:
         messages.error(request, "You don't have permission to refresh repository data.")
+        return redirect("hackathon_detail", slug=hackathon_slug)
+
+    if not repo:
+        messages.error(request, "Repository model not available.")
         return redirect("hackathon_detail", slug=hackathon_slug)
 
     try:
@@ -447,11 +509,26 @@ def refresh_all_hackathon_repositories(request, slug):
     hackathon = get_object_or_404(Hackathon, slug=slug)
 
     user = request.user
-    if not (user.is_superuser or hackathon.organization.is_admin(user) or hackathon.organization.is_manager(user)):
+    has_permission = user.is_superuser
+    
+    if not has_permission and HAS_ORGANIZATION and hasattr(hackathon, 'organization') and hackathon.organization:
+        org = hackathon.organization
+        if hasattr(org, 'is_admin') and hasattr(org, 'is_manager'):
+            has_permission = org.is_admin(user) or org.is_manager(user)
+        elif hasattr(org, 'admin') and org.admin == user:
+            has_permission = True
+        elif hasattr(org, 'managers') and user in org.managers.all():
+            has_permission = True
+        elif hasattr(org, 'owner') and org.owner == user:
+            has_permission = True
+    elif not has_permission and hasattr(hackathon, 'owner') and hackathon.owner == user:
+        has_permission = True
+    
+    if not has_permission:
         messages.error(request, "You don't have permission to refresh repository data.")
         return redirect("hackathon_detail", slug=slug)
 
-    repositories = list(hackathon.repositories.all())
+    repositories = list(hackathon.repositories.all()) if hasattr(hackathon, 'repositories') else []
     if not repositories:
         messages.info(request, f"No repositories are linked to {hackathon.name}.")
         return redirect("hackathon_detail", slug=slug)

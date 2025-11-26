@@ -38,6 +38,7 @@ dependencies = [
     "python-dateutil>=2.9.0",
     "pytz>=2023.3",
     "Pillow>=10.0.0",  # For ImageField support
+    "django-widget-tweaks>=1.4.12",  # For form styling
 ]
 
 [project.optional-dependencies]

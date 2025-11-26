@@ -407,10 +407,39 @@ class HackathonUpdateView(LoginRequiredMixin, UserPassesTestMixin, HackathonForm
     def test_func(self):
         hackathon = self.get_object()
         user = self.request.user
+        print(f"DEBUG: User {user.username} trying to edit hackathon {hackathon.name}")
+        print(f"DEBUG: User is superuser: {user.is_superuser}")
+        
         if user.is_superuser:
             return True
-        org = hackathon.organization
-        return org.is_admin(user) or org.is_manager(user)
+        
+        # Check organization-based permissions if available
+        if HAS_ORGANIZATION and hasattr(hackathon, 'organization') and hackathon.organization:
+            org = hackathon.organization
+            print(f"DEBUG: Hackathon has organization: {org}")
+            # Check if organization has admin/manager methods
+            if hasattr(org, 'is_admin') and hasattr(org, 'is_manager'):
+                result = org.is_admin(user) or org.is_manager(user)
+                print(f"DEBUG: Organization permission result: {result}")
+                return result
+        
+        # In standalone mode, allow the owner to edit
+        if hasattr(hackathon, 'owner') and hackathon.owner:
+            result = hackathon.owner == user
+            print(f"DEBUG: Owner permission result: {result}")
+            return result
+        
+        # Default to superuser only
+        print("DEBUG: Defaulting to False (no permission)")
+        return False
+
+    def form_valid(self, form):
+        """Handle valid form submission with debugging."""
+        print(f"DEBUG: Form is valid, processing...")
+        print(f"DEBUG: Form cleaned_data: {form.cleaned_data}")
+        response = super().form_valid(form)
+        print(f"DEBUG: Form saved successfully")
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -427,8 +456,20 @@ class HackathonItemCreateMixin(LoginRequiredMixin, UserPassesTestMixin):
         user = self.request.user
         if user.is_superuser:
             return True
-        org = hackathon.organization
-        return org.is_admin(user) or org.is_manager(user)
+        
+        # Check organization-based permissions if available
+        if HAS_ORGANIZATION and hasattr(hackathon, 'organization') and hackathon.organization:
+            org = hackathon.organization
+            # Check if organization has admin/manager methods
+            if hasattr(org, 'is_admin') and hasattr(org, 'is_manager'):
+                return org.is_admin(user) or org.is_manager(user)
+        
+        # In standalone mode, allow the owner to manage
+        if hasattr(hackathon, 'owner') and hackathon.owner:
+            return hackathon.owner == user
+        
+        # Default to superuser only
+        return False
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

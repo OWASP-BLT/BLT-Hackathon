@@ -175,10 +175,6 @@ class HackathonForm(forms.ModelForm):
         if not new_repo_urls:
             return []
 
-        # Only validate repo URLs if Repository model is available
-        if not Repository:
-            return []
-
         urls = [url.strip() for url in new_repo_urls.strip().split("\n") if url.strip()]
         validated_urls = []
 
@@ -213,8 +209,11 @@ class HackathonForm(forms.ModelForm):
 
             # Create and add new repositories
             new_repo_urls = self.cleaned_data.get("new_repo_urls", [])
+            print(f"DEBUG: new_repo_urls = {new_repo_urls}")  # Debug print
             if new_repo_urls:
+                print(f"DEBUG: Processing {len(new_repo_urls)} repository URLs")  # Debug print
                 for repo_url in new_repo_urls:
+                    print(f"DEBUG: Processing repo URL: {repo_url}")  # Debug print
                     # Extract owner and repo name from URL
                     parts = repo_url.rstrip("/").split("/")
                     repo_name = parts[-1]
@@ -225,6 +224,7 @@ class HackathonForm(forms.ModelForm):
                     if existing_repo:
                         # Add existing repo to hackathon
                         instance.repositories.add(existing_repo)
+                        print(f"DEBUG: Added existing repo {existing_repo} to hackathon")  # Debug print
                     else:
                         # Create new repo
                         new_repo = Repository.objects.create(
@@ -233,6 +233,7 @@ class HackathonForm(forms.ModelForm):
                             repo_url=repo_url,
                         )
                         instance.repositories.add(new_repo)
+                        print(f"DEBUG: Created and added new repo {new_repo} to hackathon")  # Debug print
 
         return instance
 

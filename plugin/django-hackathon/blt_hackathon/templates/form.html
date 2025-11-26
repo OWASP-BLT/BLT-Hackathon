@@ -262,9 +262,12 @@
 {% endblock content %}
 {% block scripts %}
     {% if form.instance.pk %}
+        <script id="repo-ids" type="application/json">
+            [{% for repo in form.instance.repositories.all %}{{ repo.id }}{% if not forloop.last %}, {% endif %}{% endfor %}]
+        </script>
         <script>
         // Store selected repositories for editing mode
-        window.selectedRepositories = [{% for repo in form.instance.repositories.all %}{{ repo.id }}{% if not forloop.last %},{% endif %}{% endfor %}];
+        window.selectedRepositories = JSON.parse(document.getElementById('repo-ids').textContent);
         </script>
     {% endif %}
     <script src="{% static 'js/hackathon_form.js' %}"></script>

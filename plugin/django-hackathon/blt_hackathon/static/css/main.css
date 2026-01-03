@@ -1,0 +1,37 @@
+/* Custom form input styles for better dark mode support */
+input:focus, textarea:focus, select:focus {
+box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+/* File input styling for dark mode */
+input[type="file"]::-webkit-file-upload-button {
+background: #e74c3c;
+border: none;
+color: white;
+padding: 8px 16px;
+border-radius: 4px;
+cursor: pointer;
+margin-right: 12px;
+}
+
+input[type="file"]::-webkit-file-upload-button:hover {
+background: #c0392b;
+}
+
+/* Checkbox styling for dark mode */
+input[type="checkbox"] {
+accent-color: #e74c3c;
+}
+
+/* Select arrow styling for dark mode */
+select {
+background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+background-position: right 0.5rem center;
+background-repeat: no-repeat;
+background-size: 1.5em 1.5em;
+padding-right: 2.5rem;
+}
+
+.dark select {
+background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%9ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}
